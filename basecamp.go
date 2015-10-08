@@ -19,20 +19,6 @@ type (
 		AccessToken string
 	}
 
-	Account struct {
-		Id      int    `json:"id"`
-		Name    string `json:"name"`
-		Href    string `json:"href"`
-		Product string `json:"product"`
-	}
-
-	Person struct {
-		Id    int    `json:"id"`
-		Name  string `json:"name"`
-		Email string `json:"email_address"`
-		Admin bool   `json:"admin"`
-	}
-
 	Project struct {
 		Id          int    `json:"id"`
 		Name        string `json:"name"`
@@ -69,6 +55,39 @@ type (
 	}
 )
 
+func (c *Client) Account(accountID int) (account Account, err error) {
+	b, err := c.get(authURL)
+	if err != nil {
+		return account, err
+	}
+	var authorizations map[string]interface{}
+	if err := json.Unmarshal(b, &authorizations); err != nil {
+		return account, err
+	}
+	accounts, ok := authorizations["accounts"].([]interface{})
+	if !ok {
+		return account, errors.New("'accounts' not found in response JSON")
+	}
+
+	for _, data := range accounts {
+		values := data.(map[string]interface{})
+		id := int(values["id"].(float64))
+		if accountID == id {
+			account = Account{
+				Id:      int(values["id"].(float64)),
+				Name:    values["name"].(string),
+				Href:    values["href"].(string),
+				Product: values["product"].(string),
+				Client:  c,
+			}
+		}
+		if account.Product != "bcx" {
+			continue
+		}
+	}
+	return account, err
+}
+
 func (c *Client) GetAccounts() ([]*Account, error) {
 	b, err := c.get(authURL)
 	if err != nil {
@@ -90,6 +109,7 @@ func (c *Client) GetAccounts() ([]*Account, error) {
 			Name:    values["name"].(string),
 			Href:    values["href"].(string),
 			Product: values["product"].(string),
+			Client:  c,
 		}
 		if account.Product != "bcx" {
 			continue
@@ -106,6 +126,23 @@ func (c *Client) GetPeople(accountID int) ([]*Person, error) {
 		return nil, err
 	}
 	var result []*Person
+	if err := json.Unmarshal(b, &result); err != nil {
+		return nil, err
+	}
+	for i := 0; i < len(result); i++ {
+		result[i].Client = c
+		result[i].AccountId = accountID
+	}
+	return result, nil
+}
+
+func (c *Client) GetEvents(accountID int) ([]*Event, error) {
+	url := fmt.Sprintf(baseURL, accountID, "events.json")
+	b, err := c.get(url)
+	if err != nil {
+		return nil, err
+	}
+	var result []*Event
 	if err := json.Unmarshal(b, &result); err != nil {
 		return nil, err
 	}
